@@ -1,10 +1,19 @@
 <template>
     <div class="ctool-content">
         <div class="ctool-main-tool">
-            <router-view v-if="is"/>
+            <Transition name="ctool-page-switch" mode="out-in">
+                <router-view v-if="is"/>
+            </Transition>
         </div>
     </div>
-    <ExtendPage v-model="openSetting">
+    <ExtendPage
+        v-model="openSetting"
+        width="720px"
+        resizable
+        resize-key="setting"
+        :min-width="540"
+        :max-width="1200"
+    >
         <Setting/>
     </ExtendPage>
     <Modal :title="$t('main_ui_prompt')" v-model="pwaUpdate" width="500">
@@ -82,5 +91,13 @@ router.afterEach(() => {
 .ctool-main-tool {
     width: 100%;
     height: 100%;
+}
+
+/* 页面切换过渡：消除 is=false→true 之间的空白闪烁 */
+.ctool-page-switch-enter-active {
+    transition: opacity 0.15s ease-out;
+}
+.ctool-page-switch-enter-from {
+    opacity: 0;
 }
 </style>

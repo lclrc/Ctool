@@ -45,6 +45,8 @@
                     <Bool size="small" border v-model="action.current.option.info.line" :label="$t('json_line_info')" />
                     <Button @click="general.repair()" type="primary" size="small" :text="$t('json_repair')" />
                     <HelpTip link="https://www.npmjs.com/package/jsonrepair" />
+                    <span>|</span>
+                    <Button @click="aiExtractJson()" size="small" :loading="aiLoading" :tooltip="$t('main_json_ai_extract_json')">✨ {{ $t('main_json_ai_extract_json') }}</Button>
                 </Align>
             </template>
             <Tabs
@@ -155,9 +157,14 @@ import ToObject from "./toObject/ToObject.vue";
 import { languages as toObjectLangLists, getOption as getToObjectOption } from "./toObject";
 import useOperate from "@/store/operate";
 import useTransfer from "@/store/transfer";
+import useSetting from "@/store/setting";
+import { chat, extractJSON} from "@/helper/llm";
+import type {AiConfig} from "@/helper/llm";
+import Message from "@/helper/message";
 
 const operate = useOperate();
 const transfer = useTransfer();
+const storeSetting = useSetting();
 
 const action = useAction(
     await initialize<actionType>(
@@ -341,6 +348,83 @@ const setExpandType = value => {
     }
     action.current.expand_type = value;
 };
+
+// AI 提取 JSON
+let aiLoading = $ref(false)
+const AI_NO_JSON_FOUND = "__CTOOL_NO_JSON_FOUND__"
+
+const getAiConfig = (): AiConfig => ({
+    provider: storeSetting.items.ai_provider,
+    baseUrl: storeSetting.items.ai_base_url,
+    apiKey: storeSetting.items.ai_api_key,
+    model: storeSetting.items.ai_model,
+})
+
+const looksLikeJsonSource = (text: string): boolean => {
+    const trimmed = text.trim()
+    return trimmed.startsWith("{")
+        || trimmed.startsWith("[")
+        || /[:=]\s*(?:\{|\[)/.test(text)
+        || /"\s*:/.test(text)
+}
+
+const aiExtractJson = async () => {
+    const input = action.current.input.trim()
+    if (!input) {
+        Message.error($t("main_json_ai_extract_empty"))
+        return
+    }
+
+    const config = getAiConfig()
+    if (!config.baseUrl || !config.model) {
+        Message.error($t("main_ai_not_configured"))
+        return
+    }
+
+    aiLoading = true
+    try {
+        const result = await chat([
+            {
+                role: "system",
+                content: `你是一个 JSON 提取专家。用户会给你一段包含 JSON 数据的文本（可能混杂日志、时间戳、转义字符等干扰内容）。你的任务是从中提取出合法的 JSON 数据。
+
+规则：
+1. 只输出提取到的 JSON，不要输出任何解释、注释或 Markdown 标记
+2. 如果有多层转义（如 \\\" 或 \\\\\"），请自动还原
+3. 如果文本中有多个独立的 JSON 片段，合并为一个 JSON 数组
+4. 输出的 JSON 必须是合法的、格式化的（带缩进）
+5. 如果文本里没有任何合法 JSON，必须只输出 ${AI_NO_JSON_FOUND}，不要输出 []、{}、null 或任何解释`,
+            },
+            {
+                role: "user",
+                content: input,
+            },
+        ], config)
+
+        const raw = result.content.trim()
+        if (raw === AI_NO_JSON_FOUND) {
+            Message.error($t("main_json_ai_extract_not_found"))
+            return
+        }
+
+        const extracted = extractJSON(raw)
+        if (extracted === AI_NO_JSON_FOUND || (extracted === "[]" && !looksLikeJsonSource(input))) {
+            Message.error($t("main_json_ai_extract_not_found"))
+            return
+        }
+        action.current.input = extracted
+        // 尝试格式化提取到的 JSON
+        try {
+            await general.beautify(extracted)
+        } catch {
+            action.success({ copy_text: extracted })
+        }
+    } catch (e: any) {
+        Message.error($t("main_json_ai_extract_fail", [e?.message || String(e)]))
+    } finally {
+        aiLoading = false
+    }
+}
 
 // 带数据跳转到格式转换工具
 const goConfigConvert = () => {

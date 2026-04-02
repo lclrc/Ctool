@@ -60,7 +60,34 @@ class Serialize<T extends ContentType = ContentType> {
 
     static formJson<T extends ContentType = ContentType>(str: string) {
         return Serialize.formCallback<T>(() => {
-            return Json.parse(str, { JSON_REPAIR: true });
+            try {
+                return Json.parse(str, { JSON_REPAIR: true });
+            } catch (e) {
+                // jsonrepair 对多行非 ASCII 文本（如纯中文）处理有缺陷
+                // fallback：多行文本按行分割作为数组
+                if (str.includes("\n")) {
+                    const lines = str.split("\n").map(l => l.trim()).filter(l => l !== "");
+                    if (lines.length > 0) {
+                        return lines as unknown as T;
+                    }
+                }
+                throw e;
+            }
+        });
+    }
+
+    static formText<T extends ContentType = ContentType>(str: string) {
+        return Serialize.formCallback<T>(() => {
+            const lines = str
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(line => line !== "");
+
+            if (lines.length > 0) {
+                return lines as unknown as T;
+            }
+
+            return [str] as unknown as T;
         });
     }
 
