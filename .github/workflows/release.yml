@@ -8,24 +8,8 @@ on:
     workflow_dispatch:
 
 jobs:
-    # 先创建 draft release，后续 job 往这个 release 上传 assets
-    create-release:
-        runs-on: ubuntu-latest
-        outputs:
-            release_id: ${{ steps.create.outputs.id }}
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
-
-            - name: Create Draft Release
-              id: create
-              uses: softprops/action-gh-release@v2
-              with:
-                  draft: true
-
     # 构建 Tauri 桌面端（macOS + Windows + Linux）
     tauri-desktop:
-        needs: create-release
         strategy:
             fail-fast: false
             matrix:
@@ -97,10 +81,3 @@ jobs:
               id: get_release_files
               with:
                   files: files=_release_files
-
-            - name: Upload Assets
-              uses: softprops/action-gh-release@v2
-              with:
-                  draft: true
-                  files: |
-                      ${{ steps.get_release_files.outputs.files }}
