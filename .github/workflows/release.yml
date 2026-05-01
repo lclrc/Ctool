@@ -76,8 +76,11 @@ jobs:
               env:
                   TAURI_TARGET: ${{ matrix.target }}
 
-            - name: Get Release Files
-              uses: edwardgeorge/file-outputs-action@main
-              id: get_release_files
+            - name: Upload Release Artifact
+              uses: actions/upload-artifact@v4
               with:
-                  files: files=_release_files
+                  name: ctool-adapter-${{ runner.os }}-${{ matrix.target }}-${{ github.ref_name }}
+                  # 例如：_release/ctool-adapter.dmg 或 _release/*.zip
+                  path: packages/ctool-adapter/tauri/src-tauri/target/release/bundle/dmg/ctool_*_x64.dmg
+                  # 可选：设置保留天数，默认90天
+                  retention-days: 7
